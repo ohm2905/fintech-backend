@@ -1,12 +1,14 @@
-import random
+import yfinance as yf
 
 def get_stock_price(stock_name):
-    # Mock prices (simulate real market)
-    mock_prices = {
-        "TCS": 3500,
-        "INFY": 1500,
-        "RELIANCE": 2800,
-        "HDFCBANK": 1600,
-    }
+    try:
+        stock = yf.Ticker(stock_name + ".NS")  # NSE stocks
+        data = stock.history(period="1d")
 
-    return mock_prices.get(stock_name.upper(), random.randint(100, 1000))
+        if not data.empty:
+            return float(data['Close'].iloc[-1])
+
+    except Exception as e:
+        print("Error fetching price:", e)
+
+    return 0
