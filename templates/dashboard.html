@@ -1,0 +1,248 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Dashboard</h2>
+
+<!-- 🔹 Summary -->
+<div class="row mt-4">
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Total Investment</h6>
+            <h3 id="investment">0</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Current Value</h6>
+            <h3 id="current">0</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Profit / Loss</h6>
+            <h3 id="profit">0</h3>
+        </div>
+    </div>
+
+</div>
+
+<!-- 🔥 Analytics -->
+<div class="row mt-4">
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Growth %</h6>
+            <h3 id="growth">0%</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Top Gainer</h6>
+            <h3 id="gainer">-</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow">
+            <h6>Top Loser</h6>
+            <h3 id="loser">-</h3>
+        </div>
+    </div>
+
+</div>
+
+<!-- ➕ Add Stock -->
+<h3 class="mt-5">Add Stock</h3>
+
+<div class="card p-3 shadow mt-3">
+    <div class="row">
+
+        <div class="col-md-3">
+            <input type="text" id="stock_name" class="form-control" placeholder="Stock (TCS)">
+        </div>
+
+        <div class="col-md-3">
+            <input type="number" id="quantity" class="form-control" placeholder="Quantity">
+        </div>
+
+        <div class="col-md-3">
+            <input type="number" id="buy_price" class="form-control" placeholder="Buy Price">
+        </div>
+
+        <div class="col-md-3">
+            <button onclick="addStock()" class="btn btn-primary w-100">
+                Add Stock
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- 📄 Portfolio -->
+<h3 class="mt-5">My Portfolio</h3>
+
+<table class="table table-bordered mt-3">
+    <thead class="table-dark">
+        <tr>
+            <th>Stock</th>
+            <th>Qty</th>
+            <th>Buy</th>
+            <th>Current</th>
+            <th>P/L</th>
+        </tr>
+    </thead>
+    <tbody id="portfolio-table"></tbody>
+</table>
+
+<!-- 📊 Chart -->
+<h3 class="mt-5">Portfolio Distribution</h3>
+
+<div class="card p-3 shadow">
+    <canvas id="portfolioChart"></canvas>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+const token = localStorage.getItem("access");
+
+if (!token) {
+    window.location.href = "/login/";
+}
+
+// 🔹 Safe fetch
+async function fetchAuth(url, options = {}) {
+    options.headers = {
+        ...options.headers,
+        "Authorization": "Bearer " + token
+    };
+
+    const res = await fetch(url, options);
+
+    if (res.status === 401) {
+        localStorage.clear();
+        window.location.href = "/login/";
+        return null;
+    }
+
+    return res;
+}
+
+// 🔹 Format numbers
+function format(num) {
+    return parseFloat(num).toFixed(2);
+}
+
+// 🔹 Load Data
+async function loadData() {
+    const res = await fetchAuth("/api/portfolio/summary/");
+    if (!res) return;
+
+    const data = await res.json();
+
+    // Summary
+    document.getElementById("investment").innerText = format(data.total_investment);
+    document.getElementById("current").innerText = format(data.total_current_value);
+
+    const profitEl = document.getElementById("profit");
+    profitEl.innerText = format(data.overall_profit_loss);
+    profitEl.style.color = data.overall_profit_loss >= 0 ? "green" : "red";
+
+    // Analytics
+    const growthEl = document.getElementById("growth");
+    growthEl.innerText = format(data.growth_percent) + "%";
+    growthEl.style.color = data.growth_percent >= 0 ? "green" : "red";
+
+    document.getElementById("gainer").innerText = data.top_gainer || "-";
+    document.getElementById("loser").innerText = data.top_loser || "-";
+
+    // Table
+    const table = document.getElementById("portfolio-table");
+    table.innerHTML = "";
+
+    data.stocks.forEach(s => {
+        const color = s.profit_loss >= 0 ? "green" : "red";
+
+        table.innerHTML += `
+            <tr>
+                <td>${s.stock}</td>
+                <td>${s.quantity}</td>
+                <td>${format(s.buy_price)}</td>
+                <td>${format(s.current_price)}</td>
+                <td style="color:${color}">
+                    ${format(s.profit_loss)}
+                </td>
+            </tr>
+        `;
+    });
+
+    // Chart
+    const labels = data.stocks.map(s => s.stock);
+    const values = data.stocks.map(s => s.current_value);
+
+    if (window.chart) window.chart.destroy();
+
+    window.chart = new Chart(
+        document.getElementById("portfolioChart"),
+        {
+            type: "doughnut",
+            data: {
+                labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: [
+                        "#4CAF50",
+                        "#2196F3",
+                        "#FFC107",
+                        "#E91E63",
+                        "#9C27B0"
+                    ]
+                }]
+            }
+        }
+    );
+}
+
+// ➕ Add Stock
+async function addStock() {
+    const stock_name = document.getElementById("stock_name").value;
+    const quantity = document.getElementById("quantity").value;
+    const buy_price = document.getElementById("buy_price").value;
+
+    if (!stock_name || !quantity || !buy_price) {
+        alert("Fill all fields");
+        return;
+    }
+
+    const res = await fetchAuth("/api/portfolio/add/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock_name, quantity, buy_price })
+    });
+
+    if (!res) return;
+
+    if (res.ok) {
+        alert("Added successfully");
+
+        document.getElementById("stock_name").value = "";
+        document.getElementById("quantity").value = "";
+        document.getElementById("buy_price").value = "";
+
+        loadData();
+    } else {
+        alert("Error adding stock");
+    }
+}
+
+loadData();
+
+</script>
+
+{% endblock %}

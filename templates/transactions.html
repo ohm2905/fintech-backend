@@ -1,0 +1,321 @@
+{% extends 'base.html' %}
+
+{% block content %}
+
+<h2>Transactions</h2>
+
+<!-- Add Transaction -->
+<div class="card p-3 shadow mt-3">
+    <div class="row">
+
+        <div class="col-md-2">
+            <input type="number" id="amount" class="form-control" placeholder="Amount">
+        </div>
+
+        <div class="col-md-2">
+            <select id="type" class="form-control" onchange="filterCategories()">
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <select id="category" class="form-control">
+                <option value="">Select Category</option>
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <input type="date" id="date" class="form-control">
+        </div>
+
+        <div class="col-md-2">
+            <button onclick="addTransaction()" class="btn btn-success w-100">
+                Add Transaction
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Add Category -->
+<h4 class="mt-4">Add New Category</h4>
+
+<div class="card p-3 shadow mt-2">
+    <div class="row">
+
+        <div class="col-md-4">
+            <input type="text" id="new_category_name" class="form-control" placeholder="Category Name">
+        </div>
+
+        <div class="col-md-4">
+            <select id="new_category_type" class="form-control">
+                <option value="income">Income</option>
+                <option value="expense">Expense</option>
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <button onclick="addCategory()" class="btn btn-primary w-100">
+                Add Category
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Delete Category -->
+<h5 class="mt-4">Delete Category</h5>
+
+<select id="delete_category" class="form-control mb-2">
+    <option value="" disabled selected>Select Category to Delete</option>
+</select>
+
+<button onclick="deleteCategory()" class="btn btn-danger">
+    Delete Category
+</button>
+
+<!-- Filters -->
+<div class="card p-3 shadow mt-4">
+    <div class="row">
+
+        <div class="col-md-3">
+            <label>From Date</label>
+            <input type="date" id="start_date" class="form-control">
+        </div>
+
+        <div class="col-md-3">
+            <label>To Date</label>
+            <input type="date" id="end_date" class="form-control">
+        </div>
+
+        <div class="col-md-3">
+            <label>Show Entries</label>
+            <select id="limit" class="form-control">
+                <option value="5">5</option>
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="100">All</option>
+            </select>
+        </div>
+
+        <div class="col-md-3 d-flex align-items-end">
+            <button onclick="loadTransactions()" class="btn btn-dark w-100">
+                Apply Filter
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- Table -->
+<table class="table table-bordered mt-4">
+    <thead class="table-dark">
+        <tr>
+            <th>Amount</th>
+            <th>Type</th>
+            <th>Category</th>
+            <th>Date</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody id="transaction-table"></tbody>
+</table>
+
+<script>
+
+const token = localStorage.getItem("access");
+
+if (!token) window.location.href = "/login/";
+
+let allCategories = [];
+
+document.getElementById("date").value =
+    new Date().toISOString().split("T")[0];
+
+async function fetchWithAuth(url, options = {}) {
+    options.headers = {
+        ...options.headers,
+        "Authorization": "Bearer " + token
+    };
+
+    const response = await fetch(url, options);
+
+    if (response.status === 401) {
+        localStorage.removeItem("access");
+        window.location.href = "/login/";
+        return null;
+    }
+
+    return response;
+}
+
+// 🔹 Load Transactions
+async function loadTransactions() {
+    const startDate = document.getElementById("start_date").value;
+    const endDate = document.getElementById("end_date").value;
+    const limit = document.getElementById("limit").value;
+
+    let url = `/api/transactions/?page=1&limit=${limit}`;
+
+    if (startDate && endDate) {
+        url += `&start_date=${startDate}&end_date=${endDate}`;
+    }
+
+    const response = await fetchWithAuth(url);
+    if (!response) return;
+
+    const res = await response.json();
+
+    const table = document.getElementById("transaction-table");
+    table.innerHTML = "";
+
+    if (!res.data || res.data.length === 0) {
+        table.innerHTML = `<tr><td colspan="5">No data</td></tr>`;
+        return;
+    }
+
+    res.data.forEach(tx => {
+        table.innerHTML += `
+            <tr>
+                <td>${tx.amount}</td>
+                <td>${tx.type}</td>
+                <td>${tx.category_name}</td>
+                <td>${tx.date}</td>
+                <td>
+                    <button onclick="deleteTransaction(${tx.id})"
+                        class="btn btn-danger btn-sm">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+        `;
+    });
+}
+
+// 🔹 Load Categories
+async function loadCategories() {
+    const response = await fetchWithAuth("/api/transactions/categories/");
+    const data = await response.json();
+
+    allCategories = data;
+
+    const deleteDropdown = document.getElementById("delete_category");
+    deleteDropdown.innerHTML =
+        '<option value="" disabled selected>Select Category to Delete</option>';
+
+    data.forEach(cat => {
+        deleteDropdown.innerHTML += `
+            <option value="${cat.id}">${cat.name}</option>
+        `;
+    });
+
+    filterCategories();
+}
+
+// 🔹 Filter categories by type
+function filterCategories() {
+    const selectedType = document.getElementById("type").value;
+    const dropdown = document.getElementById("category");
+
+    dropdown.innerHTML = '<option value="">Select Category</option>';
+
+    allCategories.forEach(cat => {
+        if (cat.type === selectedType) {
+            dropdown.innerHTML += `
+                <option value="${cat.id}">${cat.name}</option>
+            `;
+        }
+    });
+}
+
+// 🔹 Add Transaction
+async function addTransaction() {
+    const amount = document.getElementById("amount").value;
+    const type = document.getElementById("type").value;
+    const category = document.getElementById("category").value;
+    const date = document.getElementById("date").value;
+
+    if (!amount || !category || !date) {
+        alert("Fill all fields!");
+        return;
+    }
+
+    const response = await fetchWithAuth("/api/transactions/add/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, type, category, date })
+    });
+
+    if (response.ok) {
+        alert("Transaction added!");
+        document.getElementById("amount").value = "";
+        loadTransactions();
+    }
+}
+
+// 🔹 Delete Transaction
+async function deleteTransaction(id) {
+    if (!confirm("Delete this transaction?")) return;
+
+    const response = await fetchWithAuth(`/api/transactions/delete/${id}/`, {
+        method: "DELETE"
+    });
+
+    if (response && response.ok) {
+        alert("Deleted!");
+        loadTransactions();
+    }
+}
+
+// 🔹 Add Category
+async function addCategory() {
+    const name = document.getElementById("new_category_name").value;
+    const type = document.getElementById("new_category_type").value;
+
+    if (!name) {
+        alert("Enter category name!");
+        return;
+    }
+
+    const response = await fetchWithAuth("/api/transactions/add-category/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, type })
+    });
+
+    if (response.ok) {
+        alert("Category added!");
+        document.getElementById("new_category_name").value = "";
+        loadCategories();
+    }
+}
+
+// 🔹 Delete Category
+async function deleteCategory() {
+    const id = document.getElementById("delete_category").value;
+
+    if (!id) {
+        alert("Please select a category first!");
+        return;
+    }
+
+    if (!confirm("Delete this category?")) return;
+
+    const response = await fetchWithAuth(`/api/transactions/delete-category/${id}/`, {
+        method: "DELETE"
+    });
+
+    if (response && response.ok) {
+        alert("Category deleted!");
+        loadCategories();
+    }
+}
+
+// 🔥 Initial load
+loadTransactions();
+loadCategories();
+
+</script>
+
+{% endblock %}

@@ -2,10 +2,13 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Sum
-
+from django.views.decorators.csrf import csrf_exempt
 from .models import Transaction
 from .serializers import TransactionSerializer
 
+from django.http import JsonResponse
+from .models import Category
+import json
 
 # ➕ Add transaction
 @api_view(['POST'])
@@ -129,3 +132,48 @@ def category_breakdown(request):
     ]
 
     return Response(result)
+
+@csrf_exempt
+def add_category(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+
+        name = data.get("name")
+        type = data.get("type")  # income / expense
+
+        if not name or not type:
+            return JsonResponse({"error": "All fields required"}, status=400)
+
+        category = Category.objects.create(name=name, type=type)
+
+        return JsonResponse({
+            "id": category.id,
+            "name": category.name,
+            "type": category.type
+        })
+    
+
+def get_categories(request):
+    categories = Category.objects.all().values("id", "name", "type")
+    return JsonResponse(list(categories), safe=False)
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_transaction(request, id):
+    try:
+        tx = Transaction.objects.get(id=id, user=request.user)
+        tx.delete()
+        return Response({"message": "Deleted successfully"})
+    except Transaction.DoesNotExist:
+        return Response({"error": "Not found"}, status=404)
+    
+
+@csrf_exempt
+def delete_category(request, id):
+    if request.method == "DELETE":
+        try:
+            cat = Category.objects.get(id=id)
+            cat.delete()
+            return JsonResponse({"message": "Deleted"})
+        except Category.DoesNotExist:
+            return JsonResponse({"error": "Not found"}, status=404)
