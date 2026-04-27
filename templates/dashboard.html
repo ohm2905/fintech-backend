@@ -104,7 +104,11 @@
 <h3 class="mt-5">Portfolio Distribution</h3>
 
 <div class="card p-3 shadow">
-    <canvas id="portfolioChart"></canvas>
+    <div class="card p-3 shadow">
+        <div style="max-width:400px; margin:auto;">
+            <canvas id="portfolioChart"></canvas>
+        </div>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -211,6 +215,10 @@ async function loadData() {
                         "#9C27B0"
                     ]
                 }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false   // 🔥 IMPORTANT
             }
         }
     );
