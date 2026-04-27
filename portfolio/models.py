@@ -9,3 +9,4 @@ class Portfolio(models.Model):
 
     def __str__(self):
         return f"{self.stock_name} - {self.user}"
+    

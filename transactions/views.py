@@ -114,10 +114,17 @@ def monthly_summary(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def category_breakdown(request):
+
     transactions = Transaction.objects.filter(
         user=request.user,
         type='expense'
     )
+
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    if start_date and end_date:
+        transactions = transactions.filter(date__range=[start_date, end_date])
 
     data = transactions.values('category__name').annotate(
         total=Sum('amount')
@@ -184,6 +191,12 @@ def overall_summary(request):
 
     transactions = Transaction.objects.filter(user=request.user)
 
+    start_date = request.GET.get('start_date')
+    end_date = request.GET.get('end_date')
+
+    if start_date and end_date:
+        transactions = transactions.filter(date__range=[start_date, end_date])
+
     total_income = transactions.filter(type='income').aggregate(
         Sum('amount')
     )['amount__sum'] or 0
@@ -196,6 +209,7 @@ def overall_summary(request):
         "total_income": total_income,
         "total_expense": total_expense
     })
+
 
 @api_view(['PUT'])
 @permission_classes([IsAuthenticated])

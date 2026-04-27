@@ -9,6 +9,7 @@ from .models import Portfolio
 from .serializers import PortfolioSerializer
 
 
+# ➕ Add Stock
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_stock(request):
@@ -39,7 +40,7 @@ def add_stock(request):
             "message": "Stock updated",
             "stock": stock_name,
             "new_quantity": total_quantity,
-            "avg_price": round(avg_price, 2)   # ✅ rounded
+            "avg_price": round(avg_price, 2)
         })
 
     serializer = PortfolioSerializer(data=request.data)
@@ -51,6 +52,7 @@ def add_stock(request):
     return Response(serializer.errors, status=400)
 
 
+# 📊 Portfolio Summary
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def portfolio_summary(request):
@@ -60,10 +62,7 @@ def portfolio_summary(request):
     total_investment = 0
     total_current_value = 0
 
-    max_profit = float('-inf')
-    min_profit = float('inf')
-    top_gainer = None
-    top_loser = None
+    profits = []
 
     for stock in stocks:
         current_price = get_stock_price(stock.stock_name)
@@ -75,15 +74,13 @@ def portfolio_summary(request):
         total_investment += investment
         total_current_value += current_value
 
-        if profit_loss > max_profit:
-            max_profit = profit_loss
-            top_gainer = stock.stock_name
-
-        if profit_loss < min_profit:
-            min_profit = profit_loss
-            top_loser = stock.stock_name
+        profits.append({
+            "stock": stock.stock_name,
+            "profit": profit_loss
+        })
 
         result.append({
+            "id": stock.id,
             "stock": stock.stock_name,
             "quantity": stock.quantity,
             "buy_price": round(stock.buy_price, 2),
@@ -93,6 +90,20 @@ def portfolio_summary(request):
             "profit_loss": round(profit_loss, 2)
         })
 
+    # 🔥 Top gainer / loser
+    top_gainer = None
+    top_loser = None
+
+    if len(profits) >= 2:
+        profits_sorted = sorted(profits, key=lambda x: x["profit"])
+        top_loser = profits_sorted[0]["stock"]
+        top_gainer = profits_sorted[-1]["stock"]
+
+    elif len(profits) == 1:
+        top_gainer = profits[0]["stock"]
+        top_loser = None
+
+    # 🔥 Overall calculation
     overall_profit = total_current_value - total_investment
 
     growth_percent = (
@@ -109,3 +120,15 @@ def portfolio_summary(request):
         "top_loser": top_loser,
         "stocks": result
     })
+
+
+# ❌ Delete Stock
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_stock(request, id):
+    try:
+        stock = Portfolio.objects.get(id=id, user=request.user)
+        stock.delete()
+        return Response({"message": "Stock deleted successfully"})
+    except Portfolio.DoesNotExist:
+        return Response({"error": "Stock not found"}, status=404)

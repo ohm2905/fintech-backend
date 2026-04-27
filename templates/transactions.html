@@ -126,7 +126,7 @@
         </div>
 
         <div class="col-md-3 d-flex align-items-end">
-            <button onclick="loadTransactions()" class="btn btn-dark w-100">
+            <button onclick="applyFilters()" class="btn btn-dark w-100">
                 Apply Filter
             </button>
         </div>
@@ -414,7 +414,16 @@ async function deleteCategory() {
 // 🔥 Category Chart
 async function loadCategoryChart() {
 
-    const response = await fetchWithAuth("/api/transactions/category-breakdown/");
+    const startDate = document.getElementById("start_date").value;
+    const endDate = document.getElementById("end_date").value;
+
+    let url = "/api/transactions/category-breakdown/";
+
+    if (startDate && endDate) {
+        url += `?start_date=${startDate}&end_date=${endDate}`;
+    }
+
+    const response = await fetchWithAuth(url);  
     if (!response) return;
 
     const data = await response.json();
@@ -439,7 +448,17 @@ async function loadSummaryChart() {
 
     //const month = new Date().toISOString().slice(0, 7);
 
-    const response = await fetchWithAuth("/api/transactions/summary/overall/");
+    const startDate = document.getElementById("start_date").value;
+    const endDate = document.getElementById("end_date").value;
+
+    let url = "/api/transactions/summary/overall/";
+
+    if (startDate && endDate) {
+        url += `?start_date=${startDate}&end_date=${endDate}`;
+    }
+
+
+    const response = await fetchWithAuth(url);
     if (!response) return;
 
     const data = await response.json();
@@ -516,6 +535,10 @@ function prevPage() {
         document.getElementById("page-number").innerText =
         `Page ${currentPage} of ${totalPages}`;
     }
+}
+function applyFilters() {
+    currentPage = 1;
+    refreshAll();   // 🔥 refresh everything (table + charts + cards)
 }
 
 // 🔥 Master Refresh

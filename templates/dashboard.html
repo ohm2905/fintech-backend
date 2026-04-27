@@ -94,6 +94,7 @@
             <th>Buy</th>
             <th>Current</th>
             <th>P/L</th>
+            <th>Action</th>
         </tr>
     </thead>
     <tbody id="portfolio-table"></tbody>
@@ -178,6 +179,12 @@ async function loadData() {
                 <td style="color:${color}">
                     ${format(s.profit_loss)}
                 </td>
+                <td>
+                    <button onclick="deleteStock(${s.id})"
+                        class="btn btn-danger btn-sm">
+                        Delete
+                    </button>
+                </td>
             </tr>
         `;
     });
@@ -241,6 +248,26 @@ async function addStock() {
     }
 }
 
+// ❌ Delete Stock
+async function deleteStock(id) {
+
+    if (!confirm("Delete this stock?")) return;
+
+    const res = await fetchAuth(`/api/portfolio/delete/${id}/`, {
+        method: "DELETE"
+    });
+
+    if (!res) return;
+
+    if (res.ok) {
+        alert("Deleted successfully");
+        loadData();
+    } else {
+        alert("Error deleting stock");
+    }
+}
+
+// 🔥 Initial Load
 loadData();
 
 </script>
