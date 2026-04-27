@@ -75,6 +75,32 @@
     Delete Category
 </button>
 
+<div class="row mt-4">
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow text-center">
+            <h6>Total Income</h6>
+            <h3 id="total_income">0</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow text-center">
+            <h6>Total Expense</h6>
+            <h3 id="total_expense">0</h3>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card p-3 shadow text-center">
+            <h6>Balance</h6>
+            <h3 id="balance">0</h3>
+        </div>
+    </div>
+
+</div>
+
+
 <!-- Filters -->
 <div class="card p-3 shadow mt-4">
     <div class="row">
@@ -95,7 +121,7 @@
                 <option value="5">5</option>
                 <option value="10">10</option>
                 <option value="20">20</option>
-                <option value="100">All</option>
+                <option value="100">100</option>
             </select>
         </div>
 
@@ -121,18 +147,57 @@
     </thead>
     <tbody id="transaction-table"></tbody>
 </table>
+<div class="d-flex justify-content-between mt-3">
+
+    <button onclick="prevPage()" class="btn btn-secondary">
+        Previous
+    </button>
+
+    <span id="page-number">Page 1</span>
+
+    <button onclick="nextPage()" class="btn btn-secondary">
+        Next
+    </button>
+
+</div>
+
+<!-- Charts -->
+<div class="row mt-5">
+
+    <div class="col-md-6">
+        <div class="card p-3 shadow">
+            <h5>Expense Breakdown</h5>
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card p-3 shadow">
+            <h5>Income vs Expense</h5>
+            <canvas id="summaryChart"></canvas>
+        </div>
+    </div>
+
+</div>
 
 <script>
 
-const token = localStorage.getItem("access");
+let editingId = null;
 
+const token = localStorage.getItem("access");
+let currentPage = 1;
+let totalPages = 1;   // 🔥 NEW
 if (!token) window.location.href = "/login/";
 
 let allCategories = [];
+let categoryChartInstance = null;
+let summaryChartInstance = null;
 
+// default date
 document.getElementById("date").value =
     new Date().toISOString().split("T")[0];
 
+// auth helper
 async function fetchWithAuth(url, options = {}) {
     options.headers = {
         ...options.headers,
@@ -151,12 +216,14 @@ async function fetchWithAuth(url, options = {}) {
 }
 
 // 🔹 Load Transactions
+//console.log("Edit clicked", id);
 async function loadTransactions() {
+
     const startDate = document.getElementById("start_date").value;
     const endDate = document.getElementById("end_date").value;
     const limit = document.getElementById("limit").value;
 
-    let url = `/api/transactions/?page=1&limit=${limit}`;
+    let url = `/api/transactions/?page=${currentPage}&limit=${limit}`;
 
     if (startDate && endDate) {
         url += `&start_date=${startDate}&end_date=${endDate}`;
@@ -166,6 +233,7 @@ async function loadTransactions() {
     if (!response) return;
 
     const res = await response.json();
+    totalPages = Math.ceil(res.total / res.limit);
 
     const table = document.getElementById("transaction-table");
     table.innerHTML = "";
@@ -183,6 +251,11 @@ async function loadTransactions() {
                 <td>${tx.category_name}</td>
                 <td>${tx.date}</td>
                 <td>
+                    <button onclick='startEdit(${tx.id}, ${tx.amount}, "${tx.type}", ${tx.category}, "${tx.date}")'
+                        class="btn btn-warning btn-sm">
+                        Edit
+                    </button>
+
                     <button onclick="deleteTransaction(${tx.id})"
                         class="btn btn-danger btn-sm">
                         Delete
@@ -191,16 +264,21 @@ async function loadTransactions() {
             </tr>
         `;
     });
+    document.querySelector("button[onclick='prevPage()']").disabled = currentPage === 1;
+
+    document.querySelector("button[onclick='nextPage()']").disabled = currentPage >= totalPages;
 }
 
 // 🔹 Load Categories
 async function loadCategories() {
+
     const response = await fetchWithAuth("/api/transactions/categories/");
     const data = await response.json();
 
     allCategories = data;
 
     const deleteDropdown = document.getElementById("delete_category");
+
     deleteDropdown.innerHTML =
         '<option value="" disabled selected>Select Category to Delete</option>';
 
@@ -213,8 +291,9 @@ async function loadCategories() {
     filterCategories();
 }
 
-// 🔹 Filter categories by type
+// 🔹 Filter Categories
 function filterCategories() {
+
     const selectedType = document.getElementById("type").value;
     const dropdown = document.getElementById("category");
 
@@ -231,6 +310,7 @@ function filterCategories() {
 
 // 🔹 Add Transaction
 async function addTransaction() {
+
     const amount = document.getElementById("amount").value;
     const type = document.getElementById("type").value;
     const category = document.getElementById("category").value;
@@ -241,21 +321,38 @@ async function addTransaction() {
         return;
     }
 
-    const response = await fetchWithAuth("/api/transactions/add/", {
-        method: "POST",
+    let url = "/api/transactions/add/";
+    let method = "POST";
+
+    if (editingId) {
+        url = `/api/transactions/update/${editingId}/`;
+        method = "PUT";
+    }
+
+    const response = await fetchWithAuth(url, {
+        method: method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ amount, type, category, date })
     });
 
     if (response.ok) {
-        alert("Transaction added!");
+
+        alert(editingId ? "Transaction updated!" : "Transaction added!");
+
         document.getElementById("amount").value = "";
-        loadTransactions();
+        document.getElementById("category").value = "";
+
+        editingId = null;
+
+        document.querySelector("button.btn-success").innerText = "Add Transaction";
+
+        refreshAll();
     }
 }
 
 // 🔹 Delete Transaction
 async function deleteTransaction(id) {
+
     if (!confirm("Delete this transaction?")) return;
 
     const response = await fetchWithAuth(`/api/transactions/delete/${id}/`, {
@@ -264,12 +361,13 @@ async function deleteTransaction(id) {
 
     if (response && response.ok) {
         alert("Deleted!");
-        loadTransactions();
+        refreshAll();
     }
 }
 
 // 🔹 Add Category
 async function addCategory() {
+
     const name = document.getElementById("new_category_name").value;
     const type = document.getElementById("new_category_type").value;
 
@@ -287,16 +385,17 @@ async function addCategory() {
     if (response.ok) {
         alert("Category added!");
         document.getElementById("new_category_name").value = "";
-        loadCategories();
+        refreshAll();
     }
 }
 
 // 🔹 Delete Category
 async function deleteCategory() {
+
     const id = document.getElementById("delete_category").value;
 
     if (!id) {
-        alert("Please select a category first!");
+        alert("Select category!");
         return;
     }
 
@@ -308,13 +407,128 @@ async function deleteCategory() {
 
     if (response && response.ok) {
         alert("Category deleted!");
-        loadCategories();
+        refreshAll();
     }
 }
 
-// 🔥 Initial load
-loadTransactions();
-loadCategories();
+// 🔥 Category Chart
+async function loadCategoryChart() {
+
+    const response = await fetchWithAuth("/api/transactions/category-breakdown/");
+    if (!response) return;
+
+    const data = await response.json();
+
+    const ctx = document.getElementById("categoryChart");
+
+    if (categoryChartInstance) categoryChartInstance.destroy();
+
+    if (!data.length) return;
+
+    categoryChartInstance = new Chart(ctx, {
+        type: "pie",
+        data: {
+            labels: data.map(d => d.category),
+            datasets: [{ data: data.map(d => d.total) }]
+        }
+    });
+}
+
+// 🔥 Summary Chart
+async function loadSummaryChart() {
+
+    //const month = new Date().toISOString().slice(0, 7);
+
+    const response = await fetchWithAuth("/api/transactions/summary/overall/");
+    if (!response) return;
+
+    const data = await response.json();
+
+    const ctx = document.getElementById("summaryChart");
+
+    if (summaryChartInstance) summaryChartInstance.destroy();
+
+    summaryChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: ["Income", "Expense"],
+            datasets: [{
+                data: [data.total_income, data.total_expense]
+            }]
+        }
+    });
+}
+
+async function loadSummaryCards() {
+
+    const response = await fetchWithAuth("/api/transactions/summary/overall/");
+    if (!response) return;
+
+    const data = await response.json();
+
+    const income = data.total_income || 0;
+    const expense = data.total_expense || 0;
+    const balance = income - expense;
+
+    document.getElementById("total_income").innerText = income;
+    document.getElementById("total_expense").innerText = expense;
+    document.getElementById("balance").innerText = balance;
+
+    // optional color styling
+    const balanceEl = document.getElementById("balance");
+    balanceEl.style.color = balance >= 0 ? "green" : "red";
+}
+
+
+
+function startEdit(id, amount, type, category, date) {
+
+    editingId = id;
+
+    // fill form with existing data
+    document.getElementById("amount").value = amount;
+    document.getElementById("type").value = type;
+
+    filterCategories();
+
+    setTimeout(() => {
+        document.getElementById("category").value = category;
+    }, 100);
+
+    document.getElementById("date").value = date;
+
+    // change button text
+    document.querySelector("button.btn-success").innerText = "Update Transaction";
+}
+function nextPage() {
+    if (currentPage < totalPages) {
+        currentPage++;
+        loadTransactions();
+        document.getElementById("page-number").innerText =
+    `Page ${currentPage} of ${totalPages}`; 
+    }
+}
+
+function prevPage() {
+    if (currentPage > 1) {
+        currentPage--;
+        loadTransactions();
+        document.getElementById("page-number").innerText =
+        `Page ${currentPage} of ${totalPages}`;
+    }
+}
+
+// 🔥 Master Refresh
+function refreshAll() {
+    loadTransactions();
+    loadCategories();
+    loadCategoryChart();
+    loadSummaryChart();
+    loadSummaryCards(); // 🔥 ADD THIS
+}
+
+// 🔥 Initial Load
+refreshAll();
 
 </script>
 

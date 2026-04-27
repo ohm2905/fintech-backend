@@ -177,3 +177,39 @@ def delete_category(request, id):
             return JsonResponse({"message": "Deleted"})
         except Category.DoesNotExist:
             return JsonResponse({"error": "Not found"}, status=404)
+        
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def overall_summary(request):
+
+    transactions = Transaction.objects.filter(user=request.user)
+
+    total_income = transactions.filter(type='income').aggregate(
+        Sum('amount')
+    )['amount__sum'] or 0
+
+    total_expense = transactions.filter(type='expense').aggregate(
+        Sum('amount')
+    )['amount__sum'] or 0
+
+    return Response({
+        "total_income": total_income,
+        "total_expense": total_expense
+    })
+
+@api_view(['PUT'])
+@permission_classes([IsAuthenticated])
+def update_transaction(request, pk):
+    try:
+        transaction = Transaction.objects.get(id=pk, user=request.user)
+    except Transaction.DoesNotExist:
+        return Response({"error": "Transaction not found"}, status=404)
+
+    serializer = TransactionSerializer(transaction, data=request.data, partial=True)
+
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+
+    return Response(serializer.errors, status=400)
+
