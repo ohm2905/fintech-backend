@@ -85,7 +85,7 @@ DATABASES = {
         'NAME': 'fintech_db',
         'USER': 'postgres',
         'PASSWORD': 'postgres',
-        'HOST': 'postgres_db',
+        'HOST': 'db',
         'PORT': '5432',
     }
 }
